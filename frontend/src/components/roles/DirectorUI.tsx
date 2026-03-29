@@ -12,7 +12,7 @@ export default function DirectorUI({ user }: { user: any }) {
   });
 
   useEffect(() => {
-    fetch('/api/expenses/stats', {
+    fetch('/api/v1/expenses/stats', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
     .then(res => res.json())

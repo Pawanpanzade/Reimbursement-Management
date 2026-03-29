@@ -20,7 +20,7 @@ export default function CFOUI({ user }: { user: any }) {
   const [pending, setPending] = useState<Expense[]>([]);
 
   const fetchPending = () => {
-    fetch('/api/expenses/pending', {
+    fetch('/api/v1/approvals/pending', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
     .then(res => res.json())
@@ -32,7 +32,7 @@ export default function CFOUI({ user }: { user: any }) {
   }, []);
 
   const handleAction = async (id: string, action: 'Approve' | 'Reject') => {
-    const res = await fetch(`/api/expenses/${id}/action`, {
+    const res = await fetch(`/api/v1/approvals/${id}/action`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',

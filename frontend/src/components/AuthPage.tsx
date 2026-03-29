@@ -25,7 +25,7 @@ export default function AuthPage({ onLogin }: { onLogin: (token: string, user: U
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+    const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/signup';
     try {
       const res = await fetch(endpoint, {
         method: 'POST',

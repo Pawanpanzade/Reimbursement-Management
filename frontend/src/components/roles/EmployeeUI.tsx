@@ -30,7 +30,7 @@ export default function EmployeeUI({ user }: { user: any }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchExpenses = () => {
-    fetch('/api/expenses/my', {
+    fetch('/api/v1/expenses/my', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
     .then(res => res.json())
@@ -67,7 +67,7 @@ export default function EmployeeUI({ user }: { user: any }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/expenses', {
+      const res = await fetch('/api/v1/expenses', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
