@@ -5,14 +5,16 @@ import { Card, Button, Input } from '../ui-elements';
 import { cn } from '../../lib/utils';
 import { apiFetch, getAuthHeaders } from '../../lib/api';
 
-type Role = 'Admin' | 'Manager' | 'Employee' | 'CFO' | 'Director';
+type UserRole = 'admin' | 'manager' | 'employee' | 'cfo' | 'director';
+type EditableRole = 'manager' | 'employee';
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: Role;
+  role: UserRole;
   companyId: string;
+  managerId?: string | null;
 }
 
 export default function AdminUI({ user }: { user: any }) {
@@ -23,8 +25,20 @@ export default function AdminUI({ user }: { user: any }) {
     name: '',
     email: '',
     password: '',
-    role: 'Employee' as Role,
+    role: 'employee' as EditableRole,
+    managerId: '',
   });
+
+  const managers = users.filter((u) => u.role === 'manager');
+
+  const roleLabel = (role: string): string => {
+    if (role === 'admin') return 'Admin';
+    if (role === 'manager') return 'Manager';
+    if (role === 'employee') return 'Employee';
+    if (role === 'cfo') return 'CFO';
+    if (role === 'director') return 'Director';
+    return role;
+  };
 
   const fetchUsers = () => {
     apiFetch('/api/v1/users', {
@@ -40,32 +54,60 @@ export default function AdminUI({ user }: { user: any }) {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (formData.role === 'employee' && !formData.managerId) {
+      alert('Manager is required when role is employee.');
+      return;
+    }
+
     const res = await apiFetch('/api/v1/users', {
       method: 'POST',
       headers: getAuthHeaders(true),
-      body: JSON.stringify(formData)
+      body: JSON.stringify({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        managerId: formData.role === 'employee' ? formData.managerId : undefined,
+      }),
     });
+
+    const payload = await res.json().catch(() => ({}));
+
     if (res.ok) {
       setShowAdd(false);
-      setFormData({ name: '', email: '', password: '', role: 'Employee' });
+      setFormData({ name: '', email: '', password: '', role: 'employee', managerId: '' });
       fetchUsers();
+    } else {
+      alert(payload?.message || 'Failed to create user.');
     }
   };
 
   const handleUpdateUser = async (id: string) => {
+    if (formData.role === 'employee' && !formData.managerId) {
+      alert('Manager is required when role is employee.');
+      return;
+    }
+
     const res = await apiFetch(`/api/v1/users/${id}`, {
       method: 'PATCH',
       headers: getAuthHeaders(true),
       body: JSON.stringify({ 
         role: formData.role, 
         password: formData.password || undefined,
-        name: formData.name
-      })
+        name: formData.name,
+        managerId: formData.role === 'employee' ? formData.managerId : null,
+      }),
     });
+
+    const payload = await res.json().catch(() => ({}));
+
     if (res.ok) {
       setEditingUser(null);
-      setFormData({ name: '', email: '', password: '', role: 'Employee' });
+      setFormData({ name: '', email: '', password: '', role: 'employee', managerId: '' });
       fetchUsers();
+    } else {
+      alert(payload?.message || 'Failed to update user.');
     }
   };
 
@@ -85,7 +127,7 @@ export default function AdminUI({ user }: { user: any }) {
           <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
           <p className="text-zinc-500">System-wide user and role management.</p>
         </div>
-        <Button onClick={() => { setShowAdd(true); setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'Employee' }); }} className="flex items-center gap-2">
+        <Button onClick={() => { setShowAdd(true); setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'employee', managerId: '' }); }} className="flex items-center gap-2">
           <Plus size={18} />
           Add User
         </Button>
@@ -102,28 +144,41 @@ export default function AdminUI({ user }: { user: any }) {
               <form onSubmit={editingUser ? (e) => { e.preventDefault(); handleUpdateUser(editingUser.id); } : handleAddUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-zinc-500">Name</label>
-                  <Input required value={formData.name} onChange={(e: any) => setFormData({ ...formData, name: e.target.value })} />
+                  <Input required value={formData.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })} />
                 </div>
                 {!editingUser && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-zinc-500">Email</label>
-                    <Input type="email" required value={formData.email} onChange={(e: any) => setFormData({ ...formData, email: e.target.value })} />
+                    <Input type="email" required value={formData.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, email: e.target.value })} />
                   </div>
                 )}
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-zinc-500">Password {editingUser && '(Optional)'}</label>
-                  <Input type="password" required={!editingUser} value={formData.password} onChange={(e: any) => setFormData({ ...formData, password: e.target.value })} />
+                  <Input type="password" required={!editingUser} value={formData.password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, password: e.target.value })} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-zinc-500">Role</label>
-                  <select className="w-full px-4 py-2 rounded-lg border border-zinc-200" value={formData.role} onChange={(e: any) => setFormData({ ...formData, role: e.target.value as Role })}>
-                    <option value="Employee">Employee</option>
-                    <option value="Manager">Manager</option>
-                    <option value="CFO">CFO</option>
-                    <option value="Director">Director</option>
-                    <option value="Admin">Admin</option>
+                  <select className="w-full px-4 py-2 rounded-lg border border-zinc-200" value={formData.role} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, role: e.target.value as EditableRole, managerId: e.target.value === 'employee' ? formData.managerId : '' })}>
+                    <option value="employee">Employee</option>
+                    <option value="manager">Manager</option>
                   </select>
                 </div>
+                {formData.role === 'employee' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-zinc-500">Manager</label>
+                    <select
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200"
+                      value={formData.managerId}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, managerId: e.target.value })}
+                      required
+                    >
+                      <option value="">Select manager</option>
+                      {managers.map((manager) => (
+                        <option key={manager.id} value={manager.id}>{manager.name} ({manager.email})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <Button type="submit" className="md:col-span-2 mt-4">{editingUser ? 'Update User' : 'Create User'}</Button>
               </form>
             </Card>
@@ -149,14 +204,14 @@ export default function AdminUI({ user }: { user: any }) {
                 </td>
                 <td className="px-6 py-4">
                   <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold uppercase", 
-                    u.role === 'Admin' ? "bg-purple-50 text-purple-600" :
-                    u.role === 'Manager' ? "bg-blue-50 text-blue-600" :
-                    u.role === 'CFO' ? "bg-emerald-50 text-emerald-600" :
+                    u.role === 'admin' ? "bg-purple-50 text-purple-600" :
+                    u.role === 'manager' ? "bg-blue-50 text-blue-600" :
+                    u.role === 'cfo' ? "bg-emerald-50 text-emerald-600" :
                     "bg-zinc-100 text-zinc-600"
-                  )}>{u.role}</span>
+                  )}>{roleLabel(u.role)}</span>
                 </td>
                 <td className="px-6 py-4 text-right space-x-2">
-                  <button onClick={() => { setEditingUser(u); setShowAdd(false); setFormData({ name: u.name, email: u.email, password: '', role: u.role }); }} className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-400 hover:text-black"><Edit2 size={16} /></button>
+                  <button onClick={() => { setEditingUser(u); setShowAdd(false); setFormData({ name: u.name, email: u.email, password: '', role: u.role === 'manager' ? 'manager' : 'employee', managerId: u.managerId ?? '' }); }} className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-400 hover:text-black"><Edit2 size={16} /></button>
                   <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 rounded-lg text-zinc-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </td>
               </tr>

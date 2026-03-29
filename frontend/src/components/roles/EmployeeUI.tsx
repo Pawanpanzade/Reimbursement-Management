@@ -21,6 +21,7 @@ export default function EmployeeUI({ user }: { user: any }) {
   const [view, setView] = useState<'history' | 'submit'>('history');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
   const [formData, setFormData] = useState({
     amount: '',
     currency: 'USD',
@@ -66,19 +67,49 @@ export default function EmployeeUI({ user }: { user: any }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    
+    // Validate form
+    if (!formData.amount || Number(formData.amount) <= 0) {
+      setError('Amount must be greater than 0');
+      return;
+    }
+    if (!formData.description.trim()) {
+      setError('Description is required');
+      return;
+    }
+    
     setLoading(true);
     try {
+      console.log('[EmployeeUI] Submitting expense:', formData);
       const res = await apiFetch('/api/v1/expenses', {
         method: 'POST',
         headers: getAuthHeaders(true),
         body: JSON.stringify(formData)
       });
-      if (res.ok) {
-        setView('history');
-        fetchExpenses();
+      
+      console.log('[EmployeeUI] Response status:', res.status);
+      const payload = await res.json();
+      console.log('[EmployeeUI] Response payload:', payload);
+      
+      if (!res.ok) {
+        setError(payload?.message || payload?.data?.message || `Failed to submit expense (${res.status})`);
+        return;
       }
-    } catch (err) {
-      console.error(err);
+      
+      setError('');
+      setFormData({
+        amount: '',
+        currency: 'USD',
+        category: 'Food',
+        description: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+      setView('history');
+      fetchExpenses();
+    } catch (err: any) {
+      console.error('[EmployeeUI] Error:', err);
+      setError(err?.message || 'Failed to submit expense');
     } finally {
       setLoading(false);
     }
@@ -132,6 +163,15 @@ export default function EmployeeUI({ user }: { user: any }) {
         ) : (
           <motion.div key="submit" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-2xl mx-auto">
             <Card className="space-y-8">
+              {error && (
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-red-900">Error</p>
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-center border-2 border-dashed border-zinc-200 rounded-2xl p-8 bg-zinc-50/50 hover:bg-zinc-50 transition-colors cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleScan} />
                 <div className="text-center">
