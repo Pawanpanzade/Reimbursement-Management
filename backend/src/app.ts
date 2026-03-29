@@ -5,6 +5,7 @@ import morgan from 'morgan';
 
 import { errorHandler } from './middlewares/error.middleware';
 import { authRouter } from './modules/auth/auth.routes';
+import { usersRouter } from './modules/users/users.routes';
 
 const app = express();
 
@@ -26,6 +27,7 @@ apiV1Router.get('/health', (_req: Request, res: Response) => {
 });
 
 apiV1Router.use('/auth', authRouter);
+apiV1Router.use('/users', usersRouter);
 
 app.use('/api/v1', apiV1Router);
 

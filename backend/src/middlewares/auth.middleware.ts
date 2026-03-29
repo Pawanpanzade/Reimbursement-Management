@@ -65,4 +65,20 @@ export const requireAuth = (req: Request, _res: Response, next: NextFunction): v
   next();
 };
 
+export const requireRole = (role: string) => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      next(new AppError(401, 'Unauthorized.'));
+      return;
+    }
+
+    if (req.user.role !== role) {
+      next(new AppError(403, 'Forbidden.'));
+      return;
+    }
+
+    next();
+  };
+};
+
 export const authMiddleware = requireAuth;
