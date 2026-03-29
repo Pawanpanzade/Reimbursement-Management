@@ -13,8 +13,9 @@ model Company {
   currency  String
   createdAt DateTime @default(now())
 
-  users    User[]
-  expenses Expense[]
+  users          User[]
+  expenses       Expense[]
+  approvalConfig ApprovalConfig?
 
   @@map("companies")
 }
@@ -33,6 +34,7 @@ model User {
   company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   expenses         Expense[]
   approvalTasks    ApprovalTask[] @relation("approver")
+  approvalSteps    ApprovalStep[] @relation("approval_step_approver")
 
   @@index([companyId])
   @@index([managerId])
@@ -53,6 +55,7 @@ model Expense {
   date              DateTime
   receiptUrl        String?
   status            String   @default("pending_approval")
+  currentStep       Int?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -71,6 +74,7 @@ model ApprovalTask {
   id        String    @id @default(uuid())
   expenseId String
   approverId String
+  step      Int       @default(1)
   status    String    @default("pending")
   comment   String?
   actedAt   DateTime?
@@ -81,6 +85,34 @@ model ApprovalTask {
 
   @@index([expenseId])
   @@index([approverId])
+  @@index([expenseId, step])
   @@index([approverId, status])
   @@map("approval_tasks")
+}
+
+model ApprovalConfig {
+  id        String   @id @default(uuid())
+  companyId String   @unique
+  createdAt DateTime @default(now())
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  steps   ApprovalStep[]
+
+  @@index([companyId])
+  @@map("approval_configs")
+}
+
+model ApprovalStep {
+  id         String @id @default(uuid())
+  configId   String
+  stepOrder  Int
+  approverId String
+
+  config   ApprovalConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  approver User           @relation("approval_step_approver", fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, stepOrder])
+  @@index([configId])
+  @@index([approverId])
+  @@map("approval_steps")
 }

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { handleApprovalAction, getPendingApprovals } from './approval.service';
-import { AuthUser } from '../../types/express';
 
 export const getPendingApprovalsHandler = async (
   req: Request,
@@ -8,11 +7,16 @@ export const getPendingApprovalsHandler = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const user = req.user as AuthUser;
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    const user = req.user;
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
 
-    const result = await getPendingApprovals(user.id, { page, limit });
+    const result = await getPendingApprovals(user.companyId, user.id, { page, limit });
 
     res.status(200).json({
       success: true,
@@ -30,12 +34,17 @@ export const approveRejectHandler = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const user = req.user as AuthUser;
-    const { taskId } = req.params;
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    const user = req.user;
+    const taskId = String(req.params.taskId);
     const { action, comment } = req.body;
 
     const task = await handleApprovalAction(user.companyId, user.id, taskId, {
-      action,
+      action: String(action).toLowerCase() as 'approve' | 'reject',
       comment,
     });
 
