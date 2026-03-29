@@ -13,7 +13,8 @@ model Company {
   currency  String
   createdAt DateTime @default(now())
 
-  users User[]
+  users    User[]
+  expenses Expense[]
 
   @@map("companies")
 }
@@ -29,10 +30,37 @@ model User {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenses Expense[]
 
   @@index([companyId])
   @@index([managerId])
   @@index([companyId, role])
   @@map("users")
+}
+
+model Expense {
+  id                String   @id @default(uuid())
+  companyId         String
+  employeeId        String
+  submittedAmount   Float
+  submittedCurrency String
+  convertedAmount   Float
+  companyCurrency   String
+  category          String?
+  description       String
+  date              DateTime
+  receiptUrl        String?
+  status            String   @default("pending")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee User    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([companyId, employeeId])
+  @@index([companyId, status])
+  @@map("expenses")
 }
