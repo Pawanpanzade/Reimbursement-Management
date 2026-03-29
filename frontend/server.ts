@@ -90,6 +90,11 @@ app.post("/api/auth/login", async (req, res) => {
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, companyId: user.companyId } });
 });
 
+// --- Types ---
+type Role = "Admin" | "Manager" | "Employee" | "CFO" | "Director";
+
+// --- API Routes ---
+
 // Users: Get all (Admin only)
 app.get("/api/users", authenticateToken, (req: any, res) => {
   if (req.user.role !== "Admin") return res.sendStatus(403);
@@ -110,10 +115,39 @@ app.post("/api/users", authenticateToken, async (req: any, res) => {
     name,
     role,
     companyId: req.user.companyId,
-    managerId,
+    managerId: managerId || null,
   };
   db.users.push(newUser);
   res.json({ id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role });
+});
+
+// Users: Update (Admin only) - Change role or password
+app.patch("/api/users/:id", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "Admin") return res.sendStatus(403);
+  const userIndex = db.users.findIndex(u => u.id === req.params.id && u.companyId === req.user.companyId);
+  if (userIndex === -1) return res.status(404).json({ error: "User not found" });
+
+  const { role, password, name } = req.body;
+  if (role) db.users[userIndex].role = role;
+  if (name) db.users[userIndex].name = name;
+  if (password) {
+    db.users[userIndex].password = await bcrypt.hash(password, 10);
+  }
+
+  res.json({ message: "User updated successfully" });
+});
+
+// Users: Delete (Admin only)
+app.delete("/api/users/:id", authenticateToken, (req: any, res) => {
+  if (req.user.role !== "Admin") return res.sendStatus(403);
+  const userIndex = db.users.findIndex(u => u.id === req.params.id && u.companyId === req.user.companyId);
+  if (userIndex === -1) return res.status(404).json({ error: "User not found" });
+
+  // Don't allow deleting yourself
+  if (req.params.id === req.user.id) return res.status(400).json({ error: "Cannot delete yourself" });
+
+  db.users.splice(userIndex, 1);
+  res.json({ message: "User deleted successfully" });
 });
 
 // Expenses: Submit
@@ -147,26 +181,18 @@ app.get("/api/expenses/my", authenticateToken, (req: any, res) => {
 // Expenses: Get Pending for Approver
 app.get("/api/expenses/pending", authenticateToken, (req: any, res) => {
   const user = db.users.find(u => u.id === req.user.id);
-  if (!user || (user.role !== "Manager" && user.role !== "CFO" && user.role !== "Admin")) return res.sendStatus(403);
+  if (!user) return res.sendStatus(403);
 
-  // Multi-step approval: Manager -> CFO
   const pending = db.expenses.filter(e => {
-    if (e.status !== "Pending") return false;
-    
-    const submitter = db.users.find(u => u.id === e.userId);
-    if (!submitter) return false;
-
-    // Step 0: Manager approval
-    if (e.currentApproverStep === 0) {
-      // Manager check
-      if (submitter.managerId === user.id || user.role === "Admin") return true;
+    if (user.role === "Manager") {
+      return e.status === "Pending";
     }
-    
-    // Step 1: CFO approval
-    if (e.currentApproverStep === 1) {
-      if (user.role === "CFO" || user.role === "Admin") return true;
+    if (user.role === "CFO") {
+      return e.status === "ManagerApproved";
     }
-
+    if (user.role === "Admin") {
+      return e.status === "Pending" || e.status === "ManagerApproved";
+    }
     return false;
   });
   
@@ -177,8 +203,22 @@ app.get("/api/expenses/pending", authenticateToken, (req: any, res) => {
 app.post("/api/expenses/:id/action", authenticateToken, (req: any, res) => {
   const { action, comment } = req.body; // action: "Approve" or "Reject"
   const expense = db.expenses.find(e => e.id === req.params.id);
+  const user = db.users.find(u => u.id === req.user.id);
   
-  if (!expense) return res.status(404).json({ error: "Expense not found" });
+  if (!expense || !user) return res.status(404).json({ error: "Expense or user not found" });
+
+  if (action === "Reject") {
+    expense.status = "Rejected";
+  } else {
+    if (user.role === "Manager" && expense.status === "Pending") {
+      expense.status = "ManagerApproved";
+    } else if (user.role === "CFO" && expense.status === "ManagerApproved") {
+      expense.status = "Approved";
+    } else if (user.role === "Admin") {
+      // Admin can skip steps or finalize
+      expense.status = expense.status === "Pending" ? "ManagerApproved" : "Approved";
+    }
+  }
 
   expense.approvals.push({
     approverId: req.user.id,
@@ -187,20 +227,19 @@ app.post("/api/expenses/:id/action", authenticateToken, (req: any, res) => {
     date: new Date().toISOString(),
   });
 
-  if (action === "Reject") {
-    expense.status = "Rejected";
-  } else {
-    // Multi-step approval: Manager -> CFO
-    if (expense.currentApproverStep === 0) {
-      // Move to CFO approval
-      expense.currentApproverStep = 1;
-    } else if (expense.currentApproverStep === 1) {
-      // Final approval
-      expense.status = "Approved";
-    }
-  }
-
   res.json(expense);
+});
+
+// Stats: For Director/Admin
+app.get("/api/expenses/stats", authenticateToken, (req: any, res) => {
+  const companyExpenses = db.expenses.filter(e => e.companyId === req.user.companyId);
+  const stats = {
+    total: companyExpenses.filter(e => e.status === "Approved").reduce((acc, e) => acc + Number(e.amount), 0),
+    pending: companyExpenses.filter(e => e.status === "Pending" || e.status === "ManagerApproved").length,
+    approved: companyExpenses.filter(e => e.status === "Approved").length,
+    rejected: companyExpenses.filter(e => e.status === "Rejected").length,
+  };
+  res.json(stats);
 });
 
 // --- Vite Integration ---

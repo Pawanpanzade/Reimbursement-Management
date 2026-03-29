@@ -1,11 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
 export async function scanReceipt(base64Image: string) {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp", // Using flash for speed
+      model: "gemini-3-flash-preview",
       contents: [
         {
           parts: [
