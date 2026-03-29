@@ -1,0 +1,7 @@
+{
+  "name": "Odoo Reimbursement Pro",
+  "description": "A professional expense reimbursement management system with multi-level approvals, conditional workflows, and AI-powered receipt OCR.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
