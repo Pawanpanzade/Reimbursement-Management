@@ -1,10 +1,8 @@
-import { Expense, Prisma } from '@prisma/client';
-
 import { prisma } from '../../config/db';
 import { AppError } from '../../utils/app-error';
 import { getConversionRate } from './currency.service';
 
-type ExpenseStatus = 'pending' | 'approved' | 'rejected';
+type ExpenseStatus = 'pending_approval' | 'approved' | 'rejected';
 
 type SubmitExpenseInput = {
   amount: number;
@@ -21,8 +19,25 @@ type GetMyExpensesQuery = {
   status?: ExpenseStatus;
 };
 
+type ExpenseRecord = {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  submittedAmount: number;
+  submittedCurrency: string;
+  convertedAmount: number;
+  companyCurrency: string;
+  category: string | null;
+  description: string;
+  date: Date;
+  receiptUrl: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type PaginatedExpenses = {
-  expenses: Expense[];
+  expenses: ExpenseRecord[];
   meta: {
     page: number;
     limit: number;
@@ -31,7 +46,7 @@ type PaginatedExpenses = {
   };
 };
 
-const validStatuses: ExpenseStatus[] = ['pending', 'approved', 'rejected'];
+const validStatuses: ExpenseStatus[] = ['pending_approval', 'approved', 'rejected'];
 
 const normalizeCurrency = (value: string): string => {
   const normalized = value.trim().toUpperCase();
@@ -57,7 +72,7 @@ export const submitExpense = async (
   companyId: string,
   employeeId: string,
   input: SubmitExpenseInput,
-): Promise<Expense> => {
+): Promise<ExpenseRecord> => {
   const amount = Number(input.amount);
   const submittedCurrency = normalizeCurrency(String(input.currency ?? ''));
   const description = String(input.description ?? '').trim();
@@ -86,21 +101,45 @@ export const submitExpense = async (
   const rate = await getConversionRate(submittedCurrency, companyCurrency);
   const convertedAmount = Number((amount * rate).toFixed(2));
 
-  const expense = await prisma.expense.create({
-    data: {
-      companyId,
-      employeeId,
-      submittedAmount: amount,
-      submittedCurrency,
-      convertedAmount,
-      companyCurrency,
-      category,
-      description,
-      date,
-      receiptUrl,
-      status: 'pending',
+  // Create expense in transaction with approval task
+  const expense = await prisma.$transaction(
+    async (tx: { expense: typeof prisma.expense; user: typeof prisma.user; approvalTask: typeof prisma.approvalTask }) => {
+    const newExpense = await tx.expense.create({
+      data: {
+        companyId,
+        employeeId,
+        submittedAmount: amount,
+        submittedCurrency,
+        convertedAmount,
+        companyCurrency,
+        category,
+        description,
+        date,
+        receiptUrl,
+        status: 'pending_approval',
+      },
+    });
+
+    // Fetch employee's manager
+    const employee = await tx.user.findUnique({
+      where: { id: employeeId },
+      select: { managerId: true },
+    });
+
+    // Create approval task if manager exists
+    if (employee?.managerId) {
+      await tx.approvalTask.create({
+        data: {
+          expenseId: newExpense.id,
+          approverId: employee.managerId,
+          status: 'pending',
+        },
+      });
+    }
+
+    return newExpense;
     },
-  });
+  );
 
   return expense;
 };
@@ -113,14 +152,18 @@ export const getMyExpenses = async (
   const page = Number.isInteger(query.page) && query.page > 0 ? query.page : 1;
   const limit = Number.isInteger(query.limit) && query.limit > 0 && query.limit <= 100 ? query.limit : 20;
 
-  const where: Prisma.ExpenseWhereInput = {
+  const where: {
+    companyId: string;
+    employeeId: string;
+    status?: ExpenseStatus;
+  } = {
     companyId,
     employeeId,
   };
 
   if (query.status) {
     if (!validStatuses.includes(query.status)) {
-      throw new AppError(400, 'status must be pending, approved, or rejected.');
+      throw new AppError(400, 'status must be pending_approval, approved, or rejected.');
     }
     where.status = query.status;
   }
@@ -151,7 +194,7 @@ export const getExpenseById = async (
   userId: string,
   role: string,
   expenseId: string,
-): Promise<Expense> => {
+): Promise<ExpenseRecord> => {
   const expense = await prisma.expense.findFirst({
     where: {
       id: expenseId,

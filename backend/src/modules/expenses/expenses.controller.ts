@@ -49,7 +49,7 @@ export const getMyExpensesHandler = async (
     const result = await getMyExpenses(req.user.companyId, req.user.id, {
       page,
       limit,
-      status: status as 'pending' | 'approved' | 'rejected' | undefined,
+      status: status as 'pending_approval' | 'approved' | 'rejected' | undefined,
     });
 
     res.status(200).json({

@@ -30,8 +30,9 @@ model User {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  expenses Expense[]
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenses         Expense[]
+  approvalTasks    ApprovalTask[] @relation("approver")
 
   @@index([companyId])
   @@index([managerId])
@@ -51,16 +52,35 @@ model Expense {
   description       String
   date              DateTime
   receiptUrl        String?
-  status            String   @default("pending")
+  status            String   @default("pending_approval")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee User    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       User            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvalTasks  ApprovalTask[]
 
   @@index([companyId])
   @@index([employeeId])
   @@index([companyId, employeeId])
   @@index([companyId, status])
   @@map("expenses")
+}
+
+model ApprovalTask {
+  id        String    @id @default(uuid())
+  expenseId String
+  approverId String
+  status    String    @default("pending")
+  comment   String?
+  actedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  expense   Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  approver  User      @relation(fields: [approverId], references: [id], onDelete: Cascade, name: "approver")
+
+  @@index([expenseId])
+  @@index([approverId])
+  @@index([approverId, status])
+  @@map("approval_tasks")
 }
