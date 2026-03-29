@@ -3,6 +3,7 @@ import { Users, Plus, X, Edit2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, Button, Input } from '../ui-elements';
 import { cn } from '../../lib/utils';
+import { apiFetch, getAuthHeaders } from '../../lib/api';
 
 type Role = 'Admin' | 'Manager' | 'Employee' | 'CFO' | 'Director';
 
@@ -26,11 +27,11 @@ export default function AdminUI({ user }: { user: any }) {
   });
 
   const fetchUsers = () => {
-    fetch('/api/users', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    apiFetch('/api/v1/users', {
+      headers: getAuthHeaders(),
     })
     .then(res => res.json())
-    .then(data => setUsers(data));
+    .then(payload => setUsers(Array.isArray(payload?.data) ? payload.data : []));
   };
 
   useEffect(() => {
@@ -39,12 +40,9 @@ export default function AdminUI({ user }: { user: any }) {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/users', {
+    const res = await apiFetch('/api/v1/users', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      headers: getAuthHeaders(true),
       body: JSON.stringify(formData)
     });
     if (res.ok) {
@@ -55,12 +53,9 @@ export default function AdminUI({ user }: { user: any }) {
   };
 
   const handleUpdateUser = async (id: string) => {
-    const res = await fetch(`/api/users/${id}`, {
+    const res = await apiFetch(`/api/v1/users/${id}`, {
       method: 'PATCH',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ 
         role: formData.role, 
         password: formData.password || undefined,
@@ -76,9 +71,9 @@ export default function AdminUI({ user }: { user: any }) {
 
   const handleDeleteUser = async (id: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
-    const res = await fetch(`/api/users/${id}`, {
+    const res = await apiFetch(`/api/v1/users/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      headers: getAuthHeaders(),
     });
     if (res.ok) fetchUsers();
   };

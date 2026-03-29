@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Card, Button, Input } from '../ui-elements';
 import { cn } from '../../lib/utils';
 import { scanReceipt } from '../../services/aiService';
+import { apiFetch, getAuthHeaders } from '../../lib/api';
 
 interface Expense {
   id: string;
@@ -30,11 +31,11 @@ export default function EmployeeUI({ user }: { user: any }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchExpenses = () => {
-    fetch('/api/v1/expenses/my', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    apiFetch('/api/v1/expenses/my', {
+      headers: getAuthHeaders(),
     })
     .then(res => res.json())
-    .then(data => setExpenses(data));
+    .then(payload => setExpenses(Array.isArray(payload?.data) ? payload.data : []));
   };
 
   useEffect(() => {
@@ -67,12 +68,9 @@ export default function EmployeeUI({ user }: { user: any }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/expenses', {
+      const res = await apiFetch('/api/v1/expenses', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: getAuthHeaders(true),
         body: JSON.stringify(formData)
       });
       if (res.ok) {

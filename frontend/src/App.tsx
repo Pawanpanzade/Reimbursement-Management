@@ -29,6 +29,18 @@ interface User {
   companyId: string;
 }
 
+const normalizeRole = (role: string): Role => {
+  const value = role.toLowerCase();
+
+  if (value === 'admin') return 'Admin';
+  if (value === 'manager') return 'Manager';
+  if (value === 'employee') return 'Employee';
+  if (value === 'cfo') return 'CFO';
+  if (value === 'director') return 'Director';
+
+  return 'Employee';
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -38,7 +50,10 @@ export default function App() {
   useEffect(() => {
     if (token) {
       const savedUser = localStorage.getItem('user');
-      if (savedUser) setUser(JSON.parse(savedUser));
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser) as User & { role: string };
+        setUser({ ...parsed, role: normalizeRole(parsed.role) });
+      }
     }
   }, [token]);
 
@@ -49,7 +64,7 @@ export default function App() {
     setUser(null);
   };
 
-  if (!token) return <AuthPage onLogin={(t, u) => { setToken(t); setUser(u as any); }} />;
+  if (!token) return <AuthPage onLogin={(t, u) => { setToken(t); setUser({ ...u, role: normalizeRole(u.role) }); }} />;
 
   const renderRoleUI = () => {
     if (!user) return null;

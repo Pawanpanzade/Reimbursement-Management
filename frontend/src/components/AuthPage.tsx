@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input } from './ui-elements';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 interface User {
   id: string;
@@ -18,8 +19,7 @@ export default function AuthPage({ onLogin }: { onLogin: (token: string, user: U
     email: '',
     password: '',
     name: '',
-    companyName: '',
-    currency: 'USD'
+    country: 'IN'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,22 +27,35 @@ export default function AuthPage({ onLogin }: { onLogin: (token: string, user: U
     setLoading(true);
     const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/signup';
     try {
-      const res = await fetch(endpoint, {
+      const payload = isLogin
+        ? { email: formData.email, password: formData.password }
+        : {
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            country: formData.country,
+          };
+
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        onLogin(data.token, data.user);
+        localStorage.setItem('token', data.data?.token ?? data.token);
+        localStorage.setItem('user', JSON.stringify(data.data?.user ?? data.user));
+        onLogin(data.data?.token ?? data.token, data.data?.user ?? data.user);
       } else {
-        alert(data.error || 'Authentication failed');
+        alert(data.message || data.error || 'Authentication failed');
       }
     } catch (err) {
       console.error(err);
-      alert('An error occurred. Please try again.');
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        alert('Request timed out. Please ensure backend is running and try again.');
+      } else {
+        alert('Network error. Please ensure backend is running on port 4000 and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,18 +79,18 @@ export default function AuthPage({ onLogin }: { onLogin: (token: string, user: U
                   <Input required value={formData.name} onChange={(e: any) => setFormData({ ...formData, name: e.target.value })} placeholder="John Doe" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Company Name</label>
-                  <Input required value={formData.companyName} onChange={(e: any) => setFormData({ ...formData, companyName: e.target.value })} placeholder="Acme Corp" />
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Country Code</label>
+                  <Input required value={formData.country} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, country: e.target.value.toUpperCase() })} placeholder="IN" maxLength={2} />
                 </div>
               </>
             )}
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email Address</label>
-              <Input type="email" required value={formData.email} onChange={(e: any) => setFormData({ ...formData, email: e.target.value })} placeholder="name@company.com" />
+              <Input type="email" required value={formData.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, email: e.target.value })} placeholder="name@company.com" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Password</label>
-              <Input type="password" required value={formData.password} onChange={(e: any) => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" />
+              <Input type="password" required value={formData.password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" />
             </div>
             <Button type="submit" className="w-full py-3 flex items-center justify-center gap-2" disabled={loading}>
               {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
