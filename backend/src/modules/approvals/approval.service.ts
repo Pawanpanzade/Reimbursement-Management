@@ -17,6 +17,7 @@ type ApprovalTaskRecord = {
   id: string;
   expenseId: string;
   approverId: string;
+  step: number;
   status: string;
   comment: string | null;
   actedAt: Date | null;
@@ -27,6 +28,7 @@ type ApprovalWithDetails = {
   id: string;
   expenseId: string;
   approverId: string;
+  step: number;
   status: string;
   comment: string | null;
   actedAt: Date | null;
@@ -67,11 +69,13 @@ type PaginatedPendingApprovals = {
 export const createApprovalTask = async (
   expenseId: string,
   approverId: string,
+  step: number,
 ): Promise<ApprovalTaskRecord> => {
   const task = await prisma.approvalTask.create({
     data: {
       expenseId,
       approverId,
+      step,
       status: 'pending',
     },
   });
@@ -80,6 +84,7 @@ export const createApprovalTask = async (
 };
 
 export const getPendingApprovals = async (
+  companyId: string,
   approverId: string,
   query: PendingApprovalsQuery,
 ): Promise<PaginatedPendingApprovals> => {
@@ -89,6 +94,9 @@ export const getPendingApprovals = async (
   const where = {
     approverId,
     status: 'pending',
+    expense: {
+      companyId,
+    },
   };
 
   const [total, approvals] = await Promise.all([
@@ -163,29 +171,98 @@ export const handleApprovalAction = async (
   }
 
   const newStatus = action === 'approve' ? 'approved' : 'rejected';
-  const expenseStatus = action === 'approve' ? 'approved' : 'rejected';
+  if (task.expense.currentStep !== null && task.step !== task.expense.currentStep) {
+    throw new AppError(400, 'This task is not the current approval step.');
+  }
 
-  // Update task and expense in transaction
-  const updatedTask = await prisma.$transaction(async (tx: { approvalTask: typeof prisma.approvalTask; expense: typeof prisma.expense }) => {
-    const updated = await tx.approvalTask.update({
-      where: { id: taskId },
-      data: {
-        status: newStatus,
-        comment: comment || null,
-        actedAt: new Date(),
-      },
-    });
+  const updatedTask = await prisma.$transaction(
+    async (tx: {
+      approvalTask: typeof prisma.approvalTask;
+      approvalConfig: typeof prisma.approvalConfig;
+      approvalStep: typeof prisma.approvalStep;
+      expense: typeof prisma.expense;
+    }) => {
+      const updated = await tx.approvalTask.update({
+        where: { id: taskId },
+        data: {
+          status: newStatus,
+          comment: comment || null,
+          actedAt: new Date(),
+        },
+      });
 
-    await tx.expense.update({
-      where: { id: task.expenseId },
-      data: {
-        status: expenseStatus,
-        updatedAt: new Date(),
-      },
-    });
+      if (action === 'reject') {
+        await tx.expense.update({
+          where: { id: task.expenseId },
+          data: {
+            status: 'rejected',
+            updatedAt: new Date(),
+          },
+        });
 
-    return updated;
-  });
+        return updated;
+      }
+
+      const config = await tx.approvalConfig.findUnique({
+        where: { companyId: companyId },
+        select: { id: true },
+      });
+
+      if (!config) {
+        await tx.expense.update({
+          where: { id: task.expenseId },
+          data: {
+            status: 'approved',
+            updatedAt: new Date(),
+          },
+        });
+
+        return updated;
+      }
+
+      const nextStep = await tx.approvalStep.findFirst({
+        where: {
+          configId: config.id,
+          stepOrder: {
+            gt: task.step,
+          },
+        },
+        orderBy: {
+          stepOrder: 'asc',
+        },
+      });
+
+      if (nextStep) {
+        await tx.expense.update({
+          where: { id: task.expenseId },
+          data: {
+            status: 'pending_approval',
+            currentStep: nextStep.stepOrder,
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.approvalTask.create({
+          data: {
+            expenseId: task.expenseId,
+            approverId: nextStep.approverId,
+            step: nextStep.stepOrder,
+            status: 'pending',
+          },
+        });
+      } else {
+        await tx.expense.update({
+          where: { id: task.expenseId },
+          data: {
+            status: 'approved',
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      return updated;
+    },
+  );
 
   return updatedTask;
 };

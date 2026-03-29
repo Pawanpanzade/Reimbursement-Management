@@ -8,6 +8,7 @@ import { authRouter } from './modules/auth/auth.routes';
 import { expensesRouter } from './modules/expenses/expenses.routes';
 import { usersRouter } from './modules/users/users.routes';
 import { approvalsRouter } from './modules/approvals/approval.routes';
+import { approvalConfigRouter } from './modules/approvalConfig/approval-config.routes';
 
 const app = express();
 
@@ -31,6 +32,7 @@ apiV1Router.get('/health', (_req: Request, res: Response) => {
 apiV1Router.use('/auth', authRouter);
 apiV1Router.use('/expenses', expensesRouter);
 apiV1Router.use('/approvals', approvalsRouter);
+apiV1Router.use('/approval-config', approvalConfigRouter);
 apiV1Router.use('/users', usersRouter);
 
 app.use('/api/v1', apiV1Router);

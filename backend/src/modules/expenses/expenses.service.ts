@@ -32,6 +32,7 @@ type ExpenseRecord = {
   date: Date;
   receiptUrl: string | null;
   status: string;
+  currentStep: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -103,7 +104,28 @@ export const submitExpense = async (
 
   // Create expense in transaction with approval task
   const expense = await prisma.$transaction(
-    async (tx: { expense: typeof prisma.expense; user: typeof prisma.user; approvalTask: typeof prisma.approvalTask }) => {
+    async (tx: {
+      expense: typeof prisma.expense;
+      approvalTask: typeof prisma.approvalTask;
+      approvalConfig: typeof prisma.approvalConfig;
+    }) => {
+    const config = await tx.approvalConfig.findUnique({
+      where: { companyId },
+      include: {
+        steps: {
+          orderBy: {
+            stepOrder: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!config || config.steps.length === 0) {
+      throw new AppError(400, 'Approval configuration is not set for this company.');
+    }
+
+    const firstStep = config.steps[0];
+
     const newExpense = await tx.expense.create({
       data: {
         companyId,
@@ -117,25 +139,18 @@ export const submitExpense = async (
         date,
         receiptUrl,
         status: 'pending_approval',
+        currentStep: firstStep.stepOrder,
       },
     });
 
-    // Fetch employee's manager
-    const employee = await tx.user.findUnique({
-      where: { id: employeeId },
-      select: { managerId: true },
+    await tx.approvalTask.create({
+      data: {
+        expenseId: newExpense.id,
+        approverId: firstStep.approverId,
+        step: firstStep.stepOrder,
+        status: 'pending',
+      },
     });
-
-    // Create approval task if manager exists
-    if (employee?.managerId) {
-      await tx.approvalTask.create({
-        data: {
-          expenseId: newExpense.id,
-          approverId: employee.managerId,
-          status: 'pending',
-        },
-      });
-    }
 
     return newExpense;
     },
